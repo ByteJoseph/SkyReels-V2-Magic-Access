@@ -1,17 +1,16 @@
-import requests, time
+import requests
+import sys
 
 SERVER = "https://skyreels-v2-magic-access.onrender.com/"
 
-while True:
-    cmd = input("colab> ").strip()
-    if not cmd:
-        continue
+cmd = " ".join(sys.argv[1:])
+if not cmd:
+    print("Usage: cli.py <command>")
+    sys.exit(1)
 
-    requests.post(f"{SERVER}/send", json={"command": cmd})
+requests.post(f"{SERVER}/send", json={"command": cmd})
 
-    while True:
-        r = requests.get(f"{SERVER}/result").json()
-        if r["output"]:
-            print(r["output"])
-            break
-        time.sleep(1)
+with requests.get(f"{SERVER}/stream", stream=True) as r:
+    for line in r.iter_lines():
+        if line:
+            print(line.decode())

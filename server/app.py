@@ -1,48 +1,51 @@
-from flask import Flask, request, jsonify
-from collections import deque
+from flask import Flask, request, Response, jsonify
+import queue
+import threading
 
 app = Flask(__name__)
 
-# In-memory queues (OK for MVP; use Redis later)
-command_queue = deque()
-result_queue = deque()
-
-@app.route("/")
-def health():
-    return "CLI ↔ Colab Relay Running"
+stream_queue = queue.Queue()
+current_command = None
+lock = threading.Lock()
 
 @app.route("/send", methods=["POST"])
 def send_command():
+    global current_command
     data = request.json
-    command = data.get("command")
+    cmd = data.get("command")
 
-    if not command:
-        return jsonify({"error": "No command provided"}), 400
+    if not cmd:
+        return jsonify({"error": "No command"}), 400
 
-    command_queue.append(command)
-    return jsonify({"status": "command queued"})
+    with lock:
+        current_command = cmd
+
+    return jsonify({"status": "command accepted"})
 
 @app.route("/fetch", methods=["GET"])
 def fetch_command():
-    if command_queue:
-        return jsonify({"command": command_queue.popleft()})
-    return jsonify({"command": None})
+    global current_command
+    with lock:
+        cmd = current_command
+        current_command = None
+    return jsonify({"command": cmd})
 
-@app.route("/result", methods=["POST"])
-def post_result():
+@app.route("/push", methods=["POST"])
+def push_output():
     data = request.json
-    output = data.get("output")
+    line = data.get("line")
+    if line is not None:
+        stream_queue.put(line)
+    return "OK"
 
-    if not output:
-        return jsonify({"error": "No output provided"}), 400
+@app.route("/stream")
+def stream():
+    def event_stream():
+        while True:
+            line = stream_queue.get()
+            yield f"data: {line}\n\n"
 
-    result_queue.append(output)
-    return jsonify({"status": "result stored"})
+    return Response(event_stream(), mimetype="text/event-stream")
 
-@app.route("/result", methods=["GET"])
-def fetch_result():
-    if result_queue:
-        return jsonify({"output": result_queue.popleft()})
-    return jsonify({"output": None})
-
-
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=10000, threaded=True)
