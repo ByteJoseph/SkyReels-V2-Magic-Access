@@ -1,0 +1,16 @@
+torch
+torchvision
+opencv-python
+diffusers
+transformers
+tokenizers
+accelerate
+tqdm
+imageio
+easydict
+ftfy
+dashscope
+imageio-ffmpeg
+flash_attn
+numpy
+xfuser
